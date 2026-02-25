@@ -440,30 +440,65 @@ class ClaudeTimelineManager {
   }
 
   scheduleScrollSync() {
-    if (this.scrollRafId) cancelAnimationFrame(this.scrollRafId);
+    if (this.scrollRafId !== null) return;
     this.scrollRafId = requestAnimationFrame(() => {
+      this.scrollRafId = null;
+      // 同步时间轴轨道与主内容滚动
       this.syncTimelineTrackToMain();
+      // 重新渲染时间轴上的节点
+      this.updateVirtualRangeAndRender();
+      // 根据当前滚动位置更新 active
       this.computeActiveByScroll();
-      this.updateActiveDotUI();
+      // 更新左侧滑块位置
       this.updateSlider();
     });
   }
 
   computeActiveByScroll() {
     if (!this.scrollContainer || this.markers.length === 0) return;
-    const scrollCenter = this.scrollContainer.scrollTop + this.scrollContainer.clientHeight / 2;
 
-    let closest = this.markers[0];
-    let minDist = Math.abs(this.markers[0].element.offsetTop - scrollCenter);
+    const containerRect = this.scrollContainer.getBoundingClientRect();
+    const scrollTop = this.scrollContainer.scrollTop;
+    // 使用可视区域 45% 位置作为参考线，与 ChatGPT 时间轴逻辑保持一致
+    const ref = scrollTop + this.scrollContainer.clientHeight * 0.45;
 
-    for (let i = 1; i < this.markers.length; i++) {
-      const dist = Math.abs(this.markers[i].element.offsetTop - scrollCenter);
-      if (dist < minDist) {
-        minDist = dist;
-        closest = this.markers[i];
+    let activeId = this.markers[0].id;
+    for (let i = 0; i < this.markers.length; i++) {
+      const m = this.markers[i];
+      const top = m.element.getBoundingClientRect().top - containerRect.top + scrollTop;
+      if (top <= ref) {
+        activeId = m.id;
+      } else {
+        break;
       }
     }
-    this.activeTurnId = closest.id;
+
+    if (this.activeTurnId !== activeId) {
+      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const since = now - this.lastActiveChangeTime;
+      if (since < this.minActiveChangeInterval) {
+        // 快速滚动时合并频繁的 active 变化，避免高亮抖动
+        this.pendingActiveId = activeId;
+        if (!this.activeChangeTimer) {
+          const delay = Math.max(this.minActiveChangeInterval - since, 0);
+          this.activeChangeTimer = setTimeout(() => {
+            this.activeChangeTimer = null;
+            if (this.pendingActiveId && this.pendingActiveId !== this.activeTurnId) {
+              this.activeTurnId = this.pendingActiveId;
+              this.updateActiveDotUI();
+              this.lastActiveChangeTime = (typeof performance !== 'undefined' && performance.now)
+                ? performance.now()
+                : Date.now();
+            }
+            this.pendingActiveId = null;
+          }, delay);
+        }
+      } else {
+        this.activeTurnId = activeId;
+        this.updateActiveDotUI();
+        this.lastActiveChangeTime = now;
+      }
+    }
   }
 
   updateSlider() {
@@ -487,6 +522,7 @@ class ClaudeTimelineManager {
         const targetId = dot.dataset.targetTurnId;
         const m = this.markerMap.get(targetId);
         if (m && m.element) {
+          // 仅负责滚动到对应消息，active 高亮交给滚动计算逻辑统一处理
           this.smoothScrollTo(m.element);
         }
       }
@@ -505,24 +541,38 @@ class ClaudeTimelineManager {
     this.ui.timelineBar.addEventListener('mouseout', () => this.hideTooltip());
   }
 
-  smoothScrollTo(element) {
-    if (!this.scrollContainer) return;
-    
-    // 计算元素相对于滚动容器的准确位置
-    let targetY = 0;
-    if (this.scrollContainer === window || this.scrollContainer === document.documentElement || this.scrollContainer === document.body) {
-      const rect = element.getBoundingClientRect();
-      targetY = window.scrollY + rect.top - 100; // 留出顶部余量
-    } else {
-      const rect = element.getBoundingClientRect();
-      const containerRect = this.scrollContainer.getBoundingClientRect();
-      targetY = this.scrollContainer.scrollTop + (rect.top - containerRect.top) - 20;
-    }
+  smoothScrollTo(targetElement, duration = 600) {
+    if (!this.scrollContainer || !targetElement) return;
 
-    this.scrollContainer.scrollTo({
-      top: targetY,
-      behavior: 'smooth'
-    });
+    const containerRect = this.scrollContainer.getBoundingClientRect();
+    const targetRect = targetElement.getBoundingClientRect();
+    const targetPosition = targetRect.top - containerRect.top + this.scrollContainer.scrollTop;
+    const startPosition = this.scrollContainer.scrollTop;
+    const distance = targetPosition - startPosition;
+    let startTime = null;
+
+    const animation = (currentTime) => {
+      this.isScrolling = true;
+      if (startTime === null) startTime = currentTime;
+      const timeElapsed = currentTime - startTime;
+      const run = this.easeInOutQuad(timeElapsed, startPosition, distance, duration);
+      this.scrollContainer.scrollTop = run;
+      if (timeElapsed < duration) {
+        requestAnimationFrame(animation);
+      } else {
+        this.scrollContainer.scrollTop = targetPosition;
+        this.isScrolling = false;
+      }
+    };
+
+    requestAnimationFrame(animation);
+  }
+
+  easeInOutQuad(t, b, c, d) {
+    t /= d / 2;
+    if (t < 1) return c / 2 * t * t + b;
+    t--;
+    return -c / 2 * (t * (t - 2) - 1) + b;
   }
 
   showTooltip(m, dot) {
