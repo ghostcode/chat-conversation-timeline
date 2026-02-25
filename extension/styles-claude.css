@@ -1,0 +1,212 @@
+/*
+  Claude Timeline Stylesheet
+  This CSS is designed to be resilient and adapt to Claude's light/dark themes.
+*/
+
+:root {
+  --timeline-dot-color: #D1D5DB;
+  /* Light mode gray */
+  --timeline-dot-active-color: #D97757;
+  /* Claude's accent peach/orange */
+  --timeline-star-color: #F59E0B;
+  /* amber-500 for starred */
+
+  /* Tooltip tokens (light) */
+  --timeline-tooltip-bg: #FFFFFF;
+  --timeline-tooltip-text: #1F2937;
+  --timeline-tooltip-border: #E5E7EB;
+  --timeline-tooltip-radius: 12px;
+  --timeline-tooltip-shadow: 0 4px 14px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.06);
+
+  --timeline-tooltip-lh: 18px;
+  --timeline-tooltip-pad-y: 10px;
+  --timeline-tooltip-pad-x: 12px;
+  --timeline-tooltip-border-w: 1px;
+  --timeline-tooltip-arrow-size: 8px;
+  --timeline-tooltip-arrow-outside: 4px;
+  --timeline-tooltip-anim-in: 120ms cubic-bezier(0, 0, 0.2, 1);
+  --timeline-tooltip-anim-out: 100ms linear;
+
+  --timeline-bar-bg: rgba(240, 240, 240, 0.8);
+  --timeline-dot-size: 12px;
+  --timeline-active-ring: 3px;
+  --timeline-track-padding: 16px;
+  --timeline-tooltip-max: 288px;
+  --timeline-hit-size: 30px;
+  --timeline-hold-ms: 550ms;
+}
+
+/* Dark mode override */
+html.dark,
+body.dark,
+html[data-theme="dark"],
+[data-theme="dark"],
+[data-color-mode="dark"] {
+  --timeline-dot-color: #555555;
+  --timeline-dot-active-color: #E28A6D;
+  --timeline-star-color: #F59E0B;
+  --timeline-tooltip-bg: #2B2B2B;
+  --timeline-tooltip-text: #EAEAEA;
+  --timeline-tooltip-border: #3A3A3A;
+  --timeline-bar-bg: rgba(50, 50, 50, 0.8);
+}
+
+.chatgpt-timeline-bar {
+  position: fixed;
+  top: 60px;
+  right: 15px;
+  width: 24px;
+  height: calc(100vh - 100px);
+  z-index: 2147483646;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 10px;
+  background-color: var(--timeline-bar-bg);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: background-color 0.3s ease;
+  overflow: visible;
+  contain: layout paint;
+  touch-action: pan-y;
+}
+
+.timeline-track {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE/Edge */
+}
+
+.timeline-track::-webkit-scrollbar {
+  display: none;
+  /* Chrome/Safari/Webkit */
+  width: 0;
+  height: 0;
+}
+
+.timeline-track-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.timeline-dot {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--timeline-hit-size);
+  height: var(--timeline-hit-size);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.timeline-dot::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--timeline-dot-size);
+  height: var(--timeline-dot-size);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background-color: var(--timeline-dot-color);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.timeline-dot:hover::after {
+  transform: translate(-50%, -50%) scale(1.15);
+}
+
+.timeline-dot.active::after {
+  box-shadow: 0 0 0 var(--timeline-active-ring) var(--timeline-dot-active-color), 0 0 6px var(--timeline-dot-active-color);
+}
+
+.timeline-dot.starred::after {
+  background-color: var(--timeline-star-color);
+}
+
+.timeline-tooltip {
+  position: fixed;
+  max-width: var(--timeline-tooltip-max);
+  background-color: var(--timeline-tooltip-bg);
+  color: var(--timeline-tooltip-text);
+  padding: var(--timeline-tooltip-pad-y) var(--timeline-tooltip-pad-x);
+  border-radius: var(--timeline-tooltip-radius);
+  border: var(--timeline-tooltip-border-w) solid var(--timeline-tooltip-border);
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: var(--timeline-tooltip-lh);
+  max-height: calc(3 * var(--timeline-tooltip-lh) + 2 * var(--timeline-tooltip-pad-y) + 2 * var(--timeline-tooltip-border-w));
+  box-shadow: var(--timeline-tooltip-shadow);
+  pointer-events: none;
+  z-index: 2147483647;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  opacity: 0;
+  transition: opacity var(--timeline-tooltip-anim-in);
+}
+
+.timeline-tooltip.visible {
+  opacity: 1;
+}
+
+.timeline-left-slider {
+  position: fixed;
+  width: 12px;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  z-index: 2147483646;
+  pointer-events: none;
+}
+
+.timeline-left-slider.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.timeline-left-slider::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 9999px;
+}
+
+html.dark .timeline-left-slider::before {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.timeline-left-slider .timeline-left-handle {
+  position: absolute;
+  left: 2px;
+  width: 8px;
+  height: 22px;
+  background: rgba(217, 119, 87, 0.28);
+  /* Claude peach with low opacity */
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  pointer-events: auto;
+  cursor: grab;
+  transition: background-color 120ms ease;
+}
+
+.timeline-left-slider .timeline-left-handle:hover {
+  background: rgba(217, 119, 87, 0.45);
+}
